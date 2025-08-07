@@ -34,9 +34,10 @@ if menu == "🧲 Daily Magnet – Scroll Narrativo (Real)":
     else:
         st.warning("⚠️ Consulta sin resultados o error silencioso.")
 
+
 elif menu == "🔍 Gari Analytics":
-    st.subheader("🔍 Gari Analytics")
-    st.write("Módulo de análisis de datos avanzados con visualizaciones dinámicas.")
+    from gari_analytics import main as analytics_main
+    analytics_main()
 
 elif menu == "🧪 Explorador SQL":
     st.subheader("🧪 Explorador SQL")
