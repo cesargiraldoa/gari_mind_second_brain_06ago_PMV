@@ -10,12 +10,10 @@ def get_sales_data():
             "UID=db_a91131_test_admin;"
             "PWD=dEVOPS2022;"
         )
-        query = "SELECT TOP 10 * FROM dbo.Prestaciones_Temporal;"
+        query = "SELECT TOP 10 * FROM Prestaciones_Temporal;"
         df = pd.read_sql(query, conn)
         conn.close()
         return df
     except Exception as e:
-        # Esto no solo imprime sino que puedes mostrarlo si quieres
-        print("❌ ERROR SQL:", e)
-        return pd.DataFrame({'error': [str(e)]})  # Para mostrar en Streamlit
-
+        print("❌ Error al cargar datos de ventas:", e)
+        return pd.DataFrame({'error': [str(e)]})
