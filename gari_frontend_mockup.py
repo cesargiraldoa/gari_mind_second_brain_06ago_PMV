@@ -15,7 +15,6 @@ with st.sidebar:
 
 @st.cache_data(ttl=900, show_spinner="Cargando datos desde SQL Server…")
 def cargar(tabla, solo_top):
-    # tabla viene como [schema].[name]; nos quedamos con el nombre
     nombre = tabla.split("].")[-1].replace("]", "").replace("[", "") if tabla else "Prestaciones_Temporal"
     return get_sales_data(table=nombre, top=10 if solo_top else None)
 
