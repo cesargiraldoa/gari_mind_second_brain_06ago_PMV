@@ -1,6 +1,6 @@
-# main.py
 import streamlit as st
 import pandas as pd
+from datetime import date
 
 from db_connection import get_sales_data, get_all_sales_data
 import gari_analytics_edad_vs_prestacion as mod
@@ -20,12 +20,22 @@ section = st.sidebar.radio(
 )
 
 # ==============================
+# Filtro de rango de fechas
+# ==============================
+st.sidebar.subheader("📅 Filtro por fecha")
+use_filter = st.sidebar.checkbox("Filtrar por rango de fechas", value=False)
+fecha_ini = fecha_fin = None
+if use_filter:
+    fecha_ini = st.sidebar.date_input("Fecha inicial", value=date(2024, 1, 1))
+    fecha_fin = st.sidebar.date_input("Fecha final", value=date.today())
+
+# ==============================
 # Cache para cargas pesadas
 # ==============================
 @st.cache_data(show_spinner=False, ttl=600)
-def load_full_data_cached():
-    """Carga completa (todos los registros) con cache para evitar repetir consultas."""
-    df = get_all_sales_data()
+def load_full_data_cached(fecha_ini=None, fecha_fin=None):
+    """Carga completa (todos los registros o filtrados) con cache."""
+    df = get_all_sales_data(fecha_ini, fecha_fin)
     return df
 
 # =======================================
@@ -38,30 +48,28 @@ if section == "🏁 Inicio (preview)":
     if isinstance(df_preview, pd.DataFrame) and not df_preview.empty and "error" not in df_preview.columns:
         st.dataframe(df_preview, use_container_width=True)
     else:
-        st.error("No fue posible cargar la vista previa. Revisa la conexión o logs.")
+        st.error("No fue posible cargar la vista previa.")
         st.write(df_preview)
-
     st.info("➡️ Selecciona una pestaña de **análisis** en la izquierda para procesar **todos** los registros.")
 
 # ======================================================
-# 2) Secciones de análisis: usan TODOS los registros
+# 2) Secciones de análisis: usan TODOS o rango de fechas
 # ======================================================
 else:
-    with st.spinner("Procesando todos los registros…"):
-        df_full = load_full_data_cached()
+    with st.spinner("Procesando datos para análisis…"):
+        df_full = load_full_data_cached(fecha_ini, fecha_fin)
 
     if not isinstance(df_full, pd.DataFrame) or df_full.empty or ("error" in df_full.columns):
-        st.error("No fue posible cargar la tabla completa. Revisa la conexión o logs.")
-        st.write(df_full if isinstance(df_full, pd.DataFrame) else "Respuesta inesperada del cargue.")
+        st.error("No fue posible cargar la tabla. Revisa la conexión o logs.")
+        st.write(df_full if isinstance(df_full, pd.DataFrame) else "Respuesta inesperada.")
     else:
-        st.success(f"✅ Datos cargados para análisis completo: N = {len(df_full):,} registros")
+        rango_txt = f" del {fecha_ini} al {fecha_fin}" if (fecha_ini and fecha_fin) else " (todos los registros)"
+        st.success(f"✅ Datos cargados: N = {len(df_full):,} registros{rango_txt}")
 
         if section == "🔍 Visión general":
             mod.pagina_vision_general(df_full)
-
         elif section == "🧪 Patrones y relación":
             mod.pagina_patrones(df_full)
-
         elif section == "🔮 Predicción":
             mod.pagina_prediccion(df_full)
 
@@ -74,7 +82,6 @@ else:
 - **Clusters de edad** perfilan oferta, horarios y campañas.
 - El **modelo baseline** sirve para priorizar demanda por edad y simular escenarios.
 """)
-
         st.subheader("🎯 Recomendaciones rápidas")
         st.markdown("""
 - **Agenda/Staffing:** aumenta oferta donde el heatmap muestre picos por edad.
