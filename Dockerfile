@@ -37,5 +37,6 @@ RUN pip install -r requirements.txt
 COPY . .
 
 # Comando por defecto
-CMD ["streamlit", "run", "main.py", "--server.port=10000", "--server.enableCORS=false"]
+CMD ["streamlit", "run", "app/main.py", "--server.port=10000", "--server.enableCORS=false"]
+
 
