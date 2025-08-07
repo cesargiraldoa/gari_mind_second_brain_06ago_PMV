@@ -31,4 +31,5 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD ["streamlit", "run", "main.py", "--server.port=10000", "--server.enableCORS=false"]
+CMD ["streamlit", "run", "gari_frontend_mockup.py", "--server.port=10000", "--server.enableCORS=false"]
+
