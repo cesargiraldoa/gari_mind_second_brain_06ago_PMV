@@ -1,24 +1,25 @@
-# Core de Streamlit y análisis de datos
+# Framework de aplicación
 streamlit
+
+# Manipulación de datos
 pandas
 numpy
+python-dateutil
+openpyxl  # Para manejar Excel si se requiere
 
-# Conexión con SQL Server
+# Conexión a SQL Server
 pyodbc
+pymssql  # Alternativa opcional de conexión
 
 # Visualización
 plotly
 matplotlib
 seaborn
 
-# Procesamiento de fechas y datos
-python-dateutil
-
-# Modelado y Machine Learning
+# Machine Learning y modelado
 scikit-learn
 xgboost
 lightgbm
 
 # Utilidades adicionales
-openpyxl        # Leer archivos Excel si se usan
-pymssql         # Otra alternativa de conexión SQL Server si se requiere
+requests
