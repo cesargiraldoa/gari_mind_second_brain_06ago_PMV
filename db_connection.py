@@ -1,22 +1,26 @@
-import pyodbc
 import pandas as pd
+import pymssql
 
-CONN_STR = (
-    "DRIVER={ODBC Driver 18 for SQL Server};"
-    "SERVER=sql8020.site4now.net;"
-    "DATABASE=db_a91131_test;"
-    "UID=db_a91131_test_admin;"
-    "PWD=dEVOPS2022;"
-    "Encrypt=yes;TrustServerCertificate=yes;"
-)
+# Credenciales originales
+SQL_SERVER = "sql8020.site4now.net"
+SQL_DB     = "db_a91131_test"
+SQL_USER   = "db_a91131_test_admin"
+SQL_PASS   = "dEVOPS2022"
 
-def get_sqlserver_connection():
-    # Timeout corto para no colgar la UI si algo va lento
-    return pyodbc.connect(CONN_STR, timeout=10)
-
-def get_sales_data(query="SELECT TOP 1000 * FROM dbo.Prestaciones_Temporal"):
-    conn = get_sqlserver_connection()
+def get_all_sales_data():
+    """
+    Conecta vía pymssql y devuelve TODOS los datos de la tabla Prestaciones_Temporal.
+    """
+    conn = pymssql.connect(
+        server=SQL_SERVER,
+        user=SQL_USER,
+        password=SQL_PASS,
+        database=SQL_DB,
+        timeout=30,          # tiempo de espera en conexión
+        login_timeout=10     # tiempo de espera al iniciar conexión
+    )
     try:
+        query = "SELECT * FROM dbo.Prestaciones_Temporal"
         df = pd.read_sql(query, conn)
         return df
     finally:
