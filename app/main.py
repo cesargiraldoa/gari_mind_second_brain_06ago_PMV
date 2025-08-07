@@ -1,5 +1,6 @@
 import streamlit as st
-from app.db_connection import get_sales_data
+from db_connection import get_sales_data
+
 
 st.set_page_config(page_title="🧠 GariMind – Daily Magnet", layout="wide")
 
