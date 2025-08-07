@@ -1,44 +1,40 @@
-import pandas as pd
 import pymssql
+import pandas as pd
 
-SQL_SERVER = "sql8020.site4now.net"
-SQL_DB     = "db_a91131_test"
-SQL_USER   = "db_a91131_test_admin"
-SQL_PASS   = "dEVOPS2022"
+SERVER = "147.182.194.168"
+USER = "sa"
+PASSWORD = "dEVOPS2022a"
+DATABASE = "DENTISALUD"
 
-def _connect():
+def get_connection():
     return pymssql.connect(
-        server=SQL_SERVER, user=SQL_USER, password=SQL_PASS, database=SQL_DB,
-        timeout=30, login_timeout=10
+        server=SERVER, user=USER, password=PASSWORD, database=DATABASE,
+        timeout=30, login_timeout=10, as_dict=False
     )
 
-def list_tables_like(pattern="Prestaciones"):
+def get_sales_data(table="Prestaciones_Temporal", top=None):
     """
-    Lista tablas/vistas disponibles, opcionalmente filtrando por patrón.
-    Devuelve nombres calificados con esquema: [schema].[name]
+    Trae datos desde SQL Server vía pymssql.
+    - table: nombre de la tabla/vista (sin esquema si es dbo)
+    - top: si None, trae TODO; si es int, aplica TOP n
     """
-    q = """
+    top_clause = f"TOP {int(top)} " if top else ""
+    query = f"SELECT {top_clause} * FROM dbo.{table};"
+    with get_connection() as conn:
+        df = pd.read_sql(query, conn)
+    return df
+
+def list_tables_like(pattern=None):
+    where = "WHERE TABLE_TYPE IN ('BASE TABLE','VIEW')"
+    params = []
+    if pattern:
+        where += " AND TABLE_NAME LIKE %s"
+        params.append(f"%{pattern}%")
+    q = f"""
     SELECT QUOTENAME(TABLE_SCHEMA)+'.'+QUOTENAME(TABLE_NAME) AS full_name
     FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_TYPE IN ('BASE TABLE','VIEW')
-      {where}
-    ORDER BY full_name;
+    {where}
+    ORDER BY full_name
     """
-    where = "AND TABLE_NAME LIKE %s" if pattern else ""
-    params = [f"%{pattern}%"] if pattern else []
-    with _connect() as conn:
-        return pd.read_sql(q.format(where=where), conn, params=params)["full_name"].tolist()
-
-def detect_prestaciones_table():
-    lst = list_tables_like("Prestaciones")
-    return lst[0] if lst else None
-
-def get_all_data_from(table_fullname):
-    """
-    Trae TODOS los registros de la tabla/vista indicada (con esquema).
-    `table_fullname` debe venir como [schema].[table] (ya entre corchetes).
-    """
-    q = f"SELECT * FROM {table_fullname}"
-    with _connect() as conn:
-        return pd.read_sql(q, conn)
-
+    with get_connection() as conn:
+        return pd.read_sql(q, conn, params=params)["full_name"].tolist()
