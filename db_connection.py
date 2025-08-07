@@ -2,7 +2,10 @@
 import pyodbc
 import pandas as pd
 
-def get_connection():
+def get_sqlserver_connection():
+    """
+    Retorna una conexión ODBC (Driver 18) a SQL Server.
+    """
     return pyodbc.connect(
         "DRIVER={ODBC Driver 18 for SQL Server};"
         "SERVER=sql8020.site4now.net;"
@@ -13,11 +16,11 @@ def get_connection():
 
 def get_sales_data(limit=None):
     """
-    Devuelve datos de Prestaciones_Temporal.
-    Si limit es None -> TODOS los registros (como acordamos).
-    Si limit es un int -> TOP N.
+    Lee datos de la tabla Prestaciones_Temporal.
+    - limit=None -> TODOS los registros (por defecto).
+    - limit=int  -> TOP N registros.
     """
-    conn = get_connection()
+    conn = get_sqlserver_connection()
     try:
         if limit is None:
             query = "SELECT * FROM Prestaciones_Temporal"
