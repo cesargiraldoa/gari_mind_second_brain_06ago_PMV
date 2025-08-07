@@ -1,80 +1,63 @@
-
 import streamlit as st
-
+import pandas as pd
+import pyodbc
 from db_connection import get_sales_data
 
 st.set_page_config(page_title="GariMind Second Brain – CésarStyle™", layout="wide")
-st.sidebar.title("🧠 GariMind Menu")
+st.title("🧲 Daily Magnet – Conexión a Base de Datos (main.py)")
 
-menu = st.sidebar.radio("Navegación principal", [
-    "🧲 Daily Magnet – Scroll Narrativo (Real)",
-    "🔍 Gari Analytics",
-    "🧪 Explorador SQL",
-    "🧲 Daily Magnet – Scroll Narrativo (Mockup)",
-    "🧠 Boss Journal",
-    "📦 Módulo BIC3",
-    "📈 Inteligencia Comercial",
-    "📊 Análisis Técnico Validado",
-    "📋 Proyectos y Tareas",
-    "🧬 Gari & César Lab (IA)",
-    "💾 Memoria Empresarial",
-    "🎁 Frase de Bondad Diaria"
-])
+# Evita conectar al cargar: usamos botón + cache
+@st.cache_data(ttl=300, show_spinner=True)
+def cargar_datos(query):
+    return get_sales_data(query=query)
 
-st.title("🧠 GariMind Second Brain – CésarStyle™")
+# Parámetros básicos
+with st.sidebar:
+    st.subheader("⚙️ Parámetros")
+    query = st.text_area(
+        "Consulta SQL",
+        value="SELECT TOP 1000 * FROM dbo.Prestaciones_Temporal",
+        height=120
+    )
 
-if menu == "🧲 Daily Magnet – Scroll Narrativo (Real)":
-    st.subheader("🧲 Daily Magnet – Conexión a Base de Datos (main.py)")
-    df = get_sales_data()
-    if df is not None and not df.empty:
-        if "error" in df.columns:
-            st.error(f"Error al consultar datos: {df['error'][0]}")
-        else:
-            st.dataframe(df.head(10))
-    else:
-        st.warning("⚠️ Consulta sin resultados o error silencioso.")
+col1, col2 = st.columns([1,1], vertical_alignment="center")
 
+with col1:
+    if st.button("📥 Cargar datos ahora", use_container_width=True):
+        try:
+            df = cargar_datos(query)
+            st.session_state["daily_df"] = df
+            st.success(f"Datos cargados: {len(df):,} filas, {len(df.columns)} columnas.")
+        except pyodbc.Error as e:
+            st.error("No se pudo conectar a SQL Server.")
+            st.exception(e)
+        except Exception as e:
+            st.error("Error procesando la consulta.")
+            st.exception(e)
 
-elif menu == "🔍 Gari Analytics":
-    from gari_analytics import main as analytics_main
-    analytics_main()
+with col2:
+    if st.button("🧹 Limpiar datos en memoria", use_container_width=True):
+        st.session_state.pop("daily_df", None)
+        cargar_datos.clear()  # limpia cache
+        st.info("Cache y memoria limpiadas.")
 
-elif menu == "🧪 Explorador SQL":
-    st.subheader("🧪 Explorador SQL")
-    st.write("Consulta directa a la base de datos con lenguaje natural o SQL.")
+st.divider()
 
-elif menu == "🧲 Daily Magnet – Scroll Narrativo (Mockup)":
-    st.subheader("🧲 Daily Magnet – Scroll Narrativo")
-    st.write("Resumen diario con narrativa de decisiones, aprendizajes y métricas destacadas.")
+# Mostrar resultados solo si existen
+df = st.session_state.get("daily_df")
+if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
+    st.subheader("📊 Vista rápida")
+    st.dataframe(df.head(100), use_container_width=True)
 
-elif menu == "🧠 Boss Journal":
-    st.subheader("🧠 Boss Journal")
-    st.write("Diario ejecutivo por áreas. Registro automatizado y consultivo.")
+    # Pequeño resumen útil
+    with st.expander("Resumen de columnas"):
+        meta = pd.DataFrame({
+            "columna": df.columns,
+            "nulos": df.isna().sum().values,
+            "tipo": df.dtypes.astype(str).values,
+            "únicos": [df[c].nunique(dropna=True) for c in df.columns]
+        })
+        st.dataframe(meta, use_container_width=True)
+else:
+    st.info("Pulsa **“Cargar datos ahora”** para traer la muestra.")
 
-elif menu == "📦 Módulo BIC3":
-    st.subheader("📦 Módulo BIC3")
-    st.write("Diagnóstico estratégico por bloques. Integración con documentos y análisis IA.")
-
-elif menu == "📈 Inteligencia Comercial":
-    st.subheader("📈 Inteligencia Comercial")
-    st.write("Proyecciones, oportunidades y simuladores financieros por zona o canal.")
-
-elif menu == "📊 Análisis Técnico Validado":
-    st.subheader("📊 Análisis Técnico Validado")
-    st.write("Diagnóstico técnico con evidencia visual y comparativa.")
-
-elif menu == "📋 Proyectos y Tareas":
-    st.subheader("📋 Proyectos y Tareas")
-    st.write("Gestión de tareas, agenda y proyectos con integración a calendario.")
-
-elif menu == "🧬 Gari & César Lab (IA)":
-    st.subheader("🧬 Gari & César Lab (IA)")
-    st.write("Módulo de desarrollo de IA personalizado. Modelos, pruebas, algoritmos.")
-
-elif menu == "💾 Memoria Empresarial":
-    st.subheader("💾 Memoria Empresarial")
-    st.write("Recuerdos y conocimiento organizado por empresa, persona o tema.")
-
-elif menu == "🎁 Frase de Bondad Diaria":
-    st.subheader("🎁 Frase de Bondad Diaria – CésarStyle™")
-    st.write("Frase inspiradora del día + acción bondadosa sugerida + termómetro de bondad.")
