@@ -1,12 +1,9 @@
-# Imagen base robusta y compatible con ODBC SQL Server
 FROM python:3.10-bullseye
 
-# Variables de entorno
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     TZ=America/Bogota
 
-# Instalación de dependencias del sistema necesarias para pyodbc y SQL Server
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -26,18 +23,12 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && apt-get clean
 
-# Crear carpeta de trabajo
 WORKDIR /app
 
-# Copiar requirements y código
 COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
 COPY . .
 
-# Comando por defecto
 CMD ["streamlit", "run", "main.py", "--server.port=10000", "--server.enableCORS=false"]
-
-
-
