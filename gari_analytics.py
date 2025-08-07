@@ -1,60 +1,35 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from db_connection import get_sales_data
 
-def calcular_edad(fecha_nacimiento, fecha_actual):
-    return (fecha_actual - fecha_nacimiento).days // 365
 
 def main():
-    st.header("🔍 Gari Analytics – Análisis Exploratorio de Datos")
+    st.subheader("🔍 Gari Analytics – Análisis Exploratorio Inicial")
 
     df = get_sales_data()
+
     if df is None or df.empty:
-        st.error("No se pudieron cargar los datos.")
-        return
-    if "error" in df.columns:
-        st.error(f"Error: {df['error'][0]}")
+        st.warning("No se encontraron datos en la tabla.")
         return
 
-    st.subheader("📋 Vista general de los datos")
+    st.markdown("### Vista previa de los datos")
     st.dataframe(df.head(10))
 
-    st.subheader("📊 Distribución por Especialidad")
-    if "Especialidad" in df.columns:
-        fig = px.histogram(df, x="Especialidad")
-        st.plotly_chart(fig)
+    st.markdown("### Estadísticas Descriptivas")
+    st.dataframe(df.describe(include='all'))
 
-    st.subheader("📊 Distribución por Estado")
-    if "Estado" in df.columns:
-        fig = px.histogram(df, x="Estado")
-        st.plotly_chart(fig)
+    st.markdown("### Conteo de valores por columna (no nulos)")
+    st.write(df.count())
 
-    st.subheader("📊 Profesional Presupuesto")
-    if "Profesional_Presupuesto" in df.columns:
-        fig = px.histogram(df, x="Profesional_Presupuesto")
-        st.plotly_chart(fig)
+    st.markdown("### Columnas disponibles")
+    st.write(df.columns.tolist())
 
-    st.subheader("📊 Sucursal")
-    if "Sucursal_ppto" in df.columns:
-        fig = px.histogram(df, x="Sucursal_ppto")
-        st.plotly_chart(fig)
+    st.markdown("### Distribución de valores por columna categórica")
+    cat_cols = df.select_dtypes(include='object').columns
+    for col in cat_cols:
+        st.markdown(f"**{col}**")
+        st.bar_chart(df[col].value_counts().head(10))
 
-    st.subheader("📅 Distribución por Año de Presupuesto")
-    if "Fecha_Presupuesto" in df.columns:
-        df['Año_Presupuesto'] = pd.to_datetime(df['Fecha_Presupuesto'], errors='coerce').dt.year
-        fig = px.histogram(df, x="Año_Presupuesto")
-        st.plotly_chart(fig)
 
-    st.subheader("🎂 Distribución de Edad (si existe FechaNacimiento)")
-    if "FechaNacimiento" in df.columns:
-        df["FechaNacimiento"] = pd.to_datetime(df["FechaNacimiento"], errors='coerce')
-        fecha_actual = pd.Timestamp.now()
-        df["Edad"] = df["FechaNacimiento"].apply(lambda x: calcular_edad(x, fecha_actual) if pd.notnull(x) else None)
-        fig = px.histogram(df, x="Edad")
-        st.plotly_chart(fig)
-
-elif menu == "🔍 Gari Analytics":
-    from gari_analytics import main as analytics_main
-    analytics_main()
-
+if __name__ == "__main__":
+    main()
