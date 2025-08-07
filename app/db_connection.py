@@ -9,12 +9,13 @@ def get_sales_data():
             "DATABASE=db_a91131_test;"
             "UID=db_a91131_test_admin;"
             "PWD=dEVOPS2022;"
-            "Encrypt=no;"
         )
-        query = "SELECT TOP 100 * FROM dbo.Prestaciones_Temporal"
+        query = "SELECT TOP 10 * FROM dbo.Prestaciones_Temporal;"
         df = pd.read_sql(query, conn)
         conn.close()
         return df
     except Exception as e:
-        print("Error de conexión:", e)
-        return None
+        # Esto no solo imprime sino que puedes mostrarlo si quieres
+        print("❌ ERROR SQL:", e)
+        return pd.DataFrame({'error': [str(e)]})  # Para mostrar en Streamlit
+
