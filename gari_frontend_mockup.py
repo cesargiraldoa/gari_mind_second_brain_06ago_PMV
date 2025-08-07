@@ -1,63 +1,30 @@
 import streamlit as st
 import pandas as pd
-import pyodbc
-from db_connection import get_sales_data
+from db_connection import get_all_sales_data
 
 st.set_page_config(page_title="GariMind Second Brain – CésarStyle™", layout="wide")
-st.title("🧲 Daily Magnet – Conexión a Base de Datos (main.py)")
+st.title("🧲 Daily Magnet – Conexión a Base de Datos (pymssql)")
 
-# Evita conectar al cargar: usamos botón + cache
-@st.cache_data(ttl=300, show_spinner=True)
-def cargar_datos(query):
-    return get_sales_data(query=query)
+@st.cache_data(ttl=600, show_spinner="Cargando todos los datos desde SQL Server...")
+def cargar_todos_los_datos():
+    return get_all_sales_data()
 
-# Parámetros básicos
-with st.sidebar:
-    st.subheader("⚙️ Parámetros")
-    query = st.text_area(
-        "Consulta SQL",
-        value="SELECT TOP 1000 * FROM dbo.Prestaciones_Temporal",
-        height=120
-    )
-
-col1, col2 = st.columns([1,1], vertical_alignment="center")
-
-with col1:
-    if st.button("📥 Cargar datos ahora", use_container_width=True):
-        try:
-            df = cargar_datos(query)
-            st.session_state["daily_df"] = df
-            st.success(f"Datos cargados: {len(df):,} filas, {len(df.columns)} columnas.")
-        except pyodbc.Error as e:
-            st.error("No se pudo conectar a SQL Server.")
-            st.exception(e)
-        except Exception as e:
-            st.error("Error procesando la consulta.")
-            st.exception(e)
-
-with col2:
-    if st.button("🧹 Limpiar datos en memoria", use_container_width=True):
-        st.session_state.pop("daily_df", None)
-        cargar_datos.clear()  # limpia cache
-        st.info("Cache y memoria limpiadas.")
+if st.button("📥 Cargar TODOS los datos", use_container_width=True):
+    try:
+        df = cargar_todos_los_datos()
+        st.session_state["daily_df"] = df
+        st.success(f"Datos cargados: {len(df):,} filas y {len(df.columns)} columnas.")
+    except Exception as e:
+        st.error("Error conectando o trayendo datos.")
+        st.exception(e)
 
 st.divider()
 
-# Mostrar resultados solo si existen
 df = st.session_state.get("daily_df")
-if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
-    st.subheader("📊 Vista rápida")
+if isinstance(df, pd.DataFrame) and not df.empty:
+    st.subheader("📊 Vista general")
     st.dataframe(df.head(100), use_container_width=True)
-
-    # Pequeño resumen útil
-    with st.expander("Resumen de columnas"):
-        meta = pd.DataFrame({
-            "columna": df.columns,
-            "nulos": df.isna().sum().values,
-            "tipo": df.dtypes.astype(str).values,
-            "únicos": [df[c].nunique(dropna=True) for c in df.columns]
-        })
-        st.dataframe(meta, use_container_width=True)
+    st.write("**Columnas:**", list(df.columns))
+    st.write("**Total de filas:**", len(df))
 else:
-    st.info("Pulsa **“Cargar datos ahora”** para traer la muestra.")
-
+    st.info("Pulsa **Cargar TODOS los datos** para traer el dataset completo.")
