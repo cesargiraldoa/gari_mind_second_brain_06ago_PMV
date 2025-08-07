@@ -5,21 +5,28 @@ from db_connection import get_sales_data, list_tables_like
 st.set_page_config(page_title="GariMind Second Brain – CésarStyle™", layout="wide")
 st.title("🧲 Daily Magnet – Conexión a Base de Datos (pymssql)")
 
+# ---------- Sidebar ----------
 with st.sidebar:
     st.subheader("⚙️ Parámetros")
     tablas = list_tables_like() or []
-    # Por defecto intenta Prestaciones_Temporal si existe, si no, primera
     default_idx = next((i for i, t in enumerate(tablas) if "Prestaciones_Temporal" in t), 0) if tablas else 0
     tabla_sel = st.selectbox("Tabla origen", tablas, index=default_idx if tablas else 0)
     traer_top = st.checkbox("Traer solo muestra TOP 10 (debug rápido)", value=False)
 
 @st.cache_data(ttl=900, show_spinner="Cargando datos desde SQL Server…")
 def cargar(tabla, solo_top):
-    # tabla viene como [schema].[name], me quedo con el nombre sin corchetes
+    # tabla viene como [schema].[name]; nos quedamos con el nombre
     nombre = tabla.split("].")[-1].replace("]", "").replace("[", "") if tabla else "Prestaciones_Temporal"
     return get_sales_data(table=nombre, top=10 if solo_top else None)
 
-if st.button("📥 Cargar TODOS los datos", use_container_width=True):
+# ---------- Botones ----------
+col1, col2 = st.columns([1,1])
+with col1:
+    cargar_btn = st.button("📥 Cargar datos", use_container_width=True)
+with col2:
+    limpiar_btn = st.button("🧹 Limpiar datos", use_container_width=True)
+
+if cargar_btn:
     try:
         df = cargar(tabla_sel, traer_top)
         st.session_state["daily_df"] = df
@@ -28,12 +35,30 @@ if st.button("📥 Cargar TODOS los datos", use_container_width=True):
         st.error("Error conectando o trayendo datos.")
         st.exception(e)
 
+if limpiar_btn:
+    st.session_state.pop("daily_df", None)
+    cargar.clear()
+    st.info("Cache y memoria limpiadas.")
+
 st.divider()
 
+# ---------- Vista general ----------
 df = st.session_state.get("daily_df")
 if isinstance(df, pd.DataFrame) and not df.empty:
     st.subheader("📊 Vista general")
     st.dataframe(df.head(100), use_container_width=True)
     st.caption(f"Columnas: {list(df.columns)}")
+
+    # ====== AUTO-ANÁLISIS: Edad vs Prestación cuando la tabla es Prestaciones_Temporal ======
+    nombre_tabla = tabla_sel if isinstance(tabla_sel, str) else str(tabla_sel)
+    if "Prestaciones_Temporal" in nombre_tabla:
+        st.markdown("---")
+        st.markdown("### 🔎 Análisis automático detectado para `Prestaciones_Temporal`")
+        try:
+            from gari_analytics_edad_vs_prestacion import render_edad_vs_prestacion
+            render_edad_vs_prestacion(df, titulo="📊 Análisis Edad vs Prestación (auto)")
+        except Exception as e:
+            st.error("No se pudo renderizar el análisis automático.")
+            st.exception(e)
 else:
-    st.info("Pulsa **Cargar TODOS los datos** para traer el dataset completo.")
+    st.info("Selecciona una tabla y pulsa **Cargar datos**.")
