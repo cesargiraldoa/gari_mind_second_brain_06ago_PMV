@@ -23,3 +23,11 @@ lightgbm
 
 # Utilidades adicionales
 requests
+streamlit
+pandas
+pymssql
+numpy
+scipy
+scikit-learn
+plotly
+
