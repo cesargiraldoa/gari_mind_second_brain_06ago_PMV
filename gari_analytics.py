@@ -53,3 +53,8 @@ def main():
         df["Edad"] = df["FechaNacimiento"].apply(lambda x: calcular_edad(x, fecha_actual) if pd.notnull(x) else None)
         fig = px.histogram(df, x="Edad")
         st.plotly_chart(fig)
+
+elif menu == "🔍 Gari Analytics":
+    from gari_analytics import main as analytics_main
+    analytics_main()
+
