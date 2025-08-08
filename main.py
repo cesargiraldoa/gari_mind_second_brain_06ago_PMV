@@ -34,9 +34,11 @@ if use_filter:
 # ==============================
 @st.cache_data(show_spinner=False, ttl=600)
 def load_full_data_cached(fecha_ini=None, fecha_fin=None):
-    """Carga completa (todos los registros o filtrados) con cache."""
-    df = get_all_sales_data(fecha_ini, fecha_fin)
-    return df
+    """
+    Carga completa optimizada (todas las filas pero solo columnas necesarias).
+    Aplica filtro de fechas si se indican.
+    """
+    return get_all_sales_data(fecha_ini, fecha_fin)
 
 # =======================================
 # 1) Inicio: SOLO vista previa (TOP 10)
@@ -50,7 +52,7 @@ if section == "🏁 Inicio (preview)":
     else:
         st.error("No fue posible cargar la vista previa.")
         st.write(df_preview)
-    st.info("➡️ Selecciona una pestaña de **análisis** en la izquierda para procesar **todos** los registros.")
+    st.info("➡️ Selecciona una pestaña de **análisis** en la izquierda para procesar todos los registros.")
 
 # ======================================================
 # 2) Secciones de análisis: usan TODOS o rango de fechas
@@ -68,8 +70,10 @@ else:
 
         if section == "🔍 Visión general":
             mod.pagina_vision_general(df_full)
+
         elif section == "🧪 Patrones y relación":
             mod.pagina_patrones(df_full)
+
         elif section == "🔮 Predicción":
             mod.pagina_prediccion(df_full)
 
