@@ -30,4 +30,5 @@ numpy
 scipy
 scikit-learn
 plotly
+pyodbc>=5.1
 
