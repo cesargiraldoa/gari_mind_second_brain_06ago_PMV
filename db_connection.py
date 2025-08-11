@@ -1,26 +1,17 @@
 import pyodbc
-import streamlit as st
 
-@st.cache_resource
-def get_sql_conn():
-    conn_str = (
+def get_conn():
+    return pyodbc.connect(
         "DRIVER={ODBC Driver 18 for SQL Server};"
         "SERVER=sql8020.site4now.net;"
         "DATABASE=db_a91131_test;"
         "UID=db_a91131_test_admin;"
         "PWD=dEVOPS2022;"
+        "Encrypt=yes;"
         "TrustServerCertificate=yes;"
-        "Connection Timeout=15;"
+        "Connection Timeout=30;"
     )
-    cnxn = pyodbc.connect(conn_str, autocommit=False)
-    cnxn.timeout = 30  # ⏱️ timeout de consulta
-    return cnxn
 
-def run_query(query, params=None):
-    conn = get_sql_conn()
-    with conn.cursor() as cur:
-        cur.execute(query, params or [])
-        cols = [c[0] for c in cur.description]
-        rows = cur.fetchall()
-    import pandas as pd
-    return pd.DataFrame.from_records(rows, columns=cols)
+def get_sales_sample(top_n=10):
+    with get_conn() as conn:
+        return pd.read_sql(f"SELECT TOP {top_n} * FROM dbo.Prestaciones_Temporal", conn)
