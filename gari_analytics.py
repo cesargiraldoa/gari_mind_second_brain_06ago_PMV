@@ -1,217 +1,177 @@
+# gari_analytics.py
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from typing import Optional, Tuple, List
+from db_connection import get_all_sales_data
 
-from data_loader import fetch_preview, fetch_all
+# --- utilidades de detección de columnas ---
+AGE_CANDIDATES = ["Edad", "edad", "Edad_Paciente", "Edad_Anos"]
+DOB_CANDIDATES = ["Fecha_Nacimiento", "FechaNac", "Fec_Nac", "FecNacimiento", "FechaNac_Paciente"]
+DATE_CANDIDATES = ["Fecha_Accion", "Fecha_Prestacion", "Fecha_Presupuesto", "Fecha", "fecha"]
+PREST_CANDIDATES = ["Prestacion", "Prestación", "Prestacion_Principal", "Nombre_Prestacion"]
+SEDE_CANDIDATES = ["Sucursal_pto", "Sede", "Clinica", "Sucursal", "Centro"]
 
-try:
-    import plotly.express as px
-except Exception:
-    px = None  # seguimos sin fallar
-
-# -----------------------------
-# Utilidades de detección
-# -----------------------------
-AGE_CANDIDATES = ["Edad", "EdadPaciente", "Edad_paciente", "EDAD", "edad"]
-PREST_CANDIDATES = ["Prestacion", "Prestación", "Especialidad", "Servicio", "Categoria", "Categoría"]
-DATE_CANDIDATES = [
-    "Fecha_Presupuesto","FechaPrestacion","Fecha_Prestacion","FechaAtencion",
-    "Fecha_Atencion","FechaServicio","Fecha_Servicio","Fecha","fecha"
-]
-SITE_CANDIDATES = ["Sucursal","Sede","Clinica","Clínica","Sucursal_ppto","Sucursal_prest","ROMA","KENNEDY"]
-VALUE_CANDIDATES = ["Valor","ValorVenta","Valor_Venta","Total","Num_Presupuesto","NumPresupuesto"]
-
-def pick_col(candidates, cols):
+def _pick_first(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
     for c in candidates:
-        if c in cols:
+        if c in df.columns:
             return c
+        # case-insensitive
+        matches = [col for col in df.columns if col.lower() == c.lower()]
+        if matches:
+            return matches[0]
     return None
 
-def clean_age(series):
-    s = pd.to_numeric(series, errors="coerce")
-    return s.clip(lower=0, upper=120).astype("Int64")
+def _compute_age(df: pd.DataFrame, dob_col: str, ref_date_col: Optional[str]) -> pd.Series:
+    dob = pd.to_datetime(df[dob_col], errors="coerce")
+    if ref_date_col and ref_date_col in df.columns:
+        ref = pd.to_datetime(df[ref_date_col], errors="coerce")
+    else:
+        ref = pd.Timestamp.today()
+    age_years = (pd.to_datetime(ref) - dob).dt.days / 365.25
+    return np.floor(age_years).astype("Int64")
 
-def age_bins():
-    edges = [0,10,20,30,40,50,60,70,80,120]
-    labels = [f"{edges[i]}–{edges[i+1]-1}" for i in range(len(edges)-1)]
-    return edges, labels
+def _build_bins(age: pd.Series) -> pd.Categorical:
+    bins = [-1, 12, 17, 24, 34, 44, 54, 64, 120]
+    labels = ["0–12", "13–17", "18–24", "25–34", "35–44", "45–54", "55–64", "65+"]
+    return pd.cut(age.clip(lower=0, upper=120), bins=bins, labels=labels)
 
-# -----------------------------
-# Página principal del módulo
-# -----------------------------
-def main():
-    st.title("🧠 GariMind CésarStyle™ – Edad vs Prestación")
+def _top_n(series: pd.Series, n=12) -> List[str]:
+    return series.value_counts().head(n).index.tolist()
 
-    # --------- Sidebar (filtro por fecha, sin mostrar todos los registros) ---------
-    st.sidebar.markdown("## Navegación")
-    section = st.sidebar.radio("Secciones", ["🏁 Inicio (preview)", "📊 Visión general", "🧩 Patrones y relación", "🤖 Predicción (beta)"])
+def run_age_vs_prestacion():
+    st.header("📈 Módulo: Edad vs Prestación")
 
-    st.sidebar.markdown("## Filtro por fecha")
-    use_date = st.sidebar.checkbox("Filtrar por rango de fechas")
-    forced_date_col = st.sidebar.text_input("Forzar columna de fecha (opcional)", value="")
-    date_range = None
-    if use_date:
-        c1, c2 = st.sidebar.columns(2)
-        start = c1.date_input("Desde")
-        end = c2.date_input("Hasta")
-        if start and end:
-            date_range = (pd.to_datetime(start), pd.to_datetime(end) + pd.Timedelta(days=1))
+    # --- Parámetros de carga ---
+    with st.expander("Opciones de carga de datos", expanded=False):
+        tabla = st.text_input("Tabla fuente", "Prestaciones_Temporal")
+        c1, c2 = st.columns(2)
+        desde = c1.date_input("Desde (opcional)", value=None)
+        hasta = c2.date_input("Hasta (opcional)", value=None)
+        date_force = st.text_input("Forzar columna de fecha (opcional)", value="")
+        if st.button("Cargar datos (para análisis)"):
+            st.session_state["_load_trigger"] = True
 
-    # --------- Preview rápido (siempre muestra muestra, nunca todo) ---------
-    if section == "🏁 Inicio (preview)":
-        with st.spinner("Cargando muestra…"):
-            dfp = fetch_preview(10)
-        st.dataframe(dfp, use_container_width=True, height=350)
-        st.info("Esta tabla es SOLO una muestra. Los análisis de las otras pestañas usan **todos** los registros, sin mostrarlos en tabla.")
+    if not st.session_state.get("_load_trigger"):
+        st.info("Carga los datos para iniciar el análisis.")
         return
 
-    # --------- Carga completa solo para análisis ---------
-    with st.status("Cargando y procesando todos los registros…", expanded=True) as status:
-        st.write("1/4 ↪️ Descargando datos completos (sin renderizar tabla)…")
-        df = fetch_all(date_col=(forced_date_col.strip() or None), date_range=date_range)
+    df = get_all_sales_data(
+        table_name=tabla.strip(),
+        date_col=(date_force.strip() or None),
+        date_from=(desde.strftime("%Y-%m-%d") if desde else None),
+        date_to=(hasta.strftime("%Y-%m-%d") if hasta else None),
+    )
+    if df.empty:
+        st.warning("No se obtuvieron filas con los filtros dados.")
+        return
 
-        st.write("2/4 🧹 Detección de columnas clave…")
-        cols = df.columns.tolist()
-        age_col   = pick_col(AGE_CANDIDATES, cols)
-        prest_col = pick_col(PREST_CANDIDATES, cols)
-        date_col  = (forced_date_col.strip() or pick_col(DATE_CANDIDATES, cols))
-        site_col  = pick_col(SITE_CANDIDATES, cols)
-        val_col   = pick_col(VALUE_CANDIDATES, cols)
+    st.success(f"Dataset cargado para análisis: {len(df):,} filas")
 
-        missing = []
-        if age_col is None:   missing.append("Edad")
-        if prest_col is None: missing.append("Prestación/Especialidad")
-        if missing:
-            st.error(f"No se detectaron columnas obligatorias: {', '.join(missing)}. Revisa nombres o ajusta listas de candidatos.")
-            status.update(state="error")
+    # --- Detección de columnas clave ---
+    prest_col = _pick_first(df, PREST_CANDIDATES)
+    date_col  = date_force.strip() or _pick_first(df, DATE_CANDIDATES)
+    sede_col  = _pick_first(df, SEDE_CANDIDATES)
+    age_col   = _pick_first(df, AGE_CANDIDATES)
+    dob_col   = _pick_first(df, DOB_CANDIDATES)
+
+    if not prest_col:
+        st.error("No pude detectar la columna de Prestación. Indícala manualmente.")
+        prest_col = st.text_input("Columna de Prestación", value=prest_col or "")
+        if not prest_col:
             return
 
-        st.write(f"- Edad: **{age_col}** | Prestación: **{prest_col}** | Fecha: **{date_col or '—'}** | Sucursal: **{site_col or '—'}** | Valor: **{val_col or '—'}**")
+    # --- Calcular edad ---
+    if age_col and df[age_col].notna().any():
+        edad = pd.to_numeric(df[age_col], errors="coerce")
+    elif dob_col:
+        edad = _compute_age(df, dob_col, date_col)
+    else:
+        st.warning("No se encontró columna de edad ni de fecha de nacimiento. Asignaré NaN.")
+        edad = pd.Series([pd.NA]*len(df), dtype="Int64")
 
-        st.write("3/4 🔎 Preprocesando…")
-        df = df.copy()
-        df[age_col] = clean_age(df[age_col])
-        edges, labels = age_bins()
-        df["_age_bin"] = pd.cut(df[age_col], bins=edges, labels=labels, right=False)
+    df["_Edad"] = edad
+    df["_Edad_Bin"] = _build_bins(df["_Edad"])
 
-        # Tableros derivados (no se renderizan tablas completas)
-        st.write("4/4 📈 Calculando agregados…")
-        by_prest = df.groupby(prest_col, dropna=True).size().sort_values(ascending=False).rename("conteo")
-        by_age_prest = (df.groupby(["_age_bin", prest_col]).size()
-                        .reset_index(name="n")
-                        .pivot(index="_age_bin", columns=prest_col, values="n").fillna(0))
+    # --- Seleccionar top de prestaciones para visualizar ---
+    n_top = st.slider("Número de prestaciones a visualizar (Top N)", 5, 30, 12)
+    top_prest = _top_n(df[prest_col].astype(str), n=n_top)
+    dfx = df[df[prest_col].astype(str).isin(top_prest)].copy()
 
-        # Valores por prestación (si existe valor)
-        by_value = None
-        if val_col and val_col in df.columns:
-            by_value = df.groupby(prest_col)[val_col].sum().sort_values(ascending=False)
+    # --- KPIs ---
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Edad promedio", f"{pd.to_numeric(dfx['_Edad'], errors='coerce').mean():.1f} años")
+    k2.metric("Prestación más frecuente", dfx[prest_col].mode(dropna=True).iloc[0] if not dfx.empty else "—")
+    if sede_col:
+        top_sede = dfx[sede_col].mode(dropna=True).iloc[0] if not dfx.empty else "—"
+        k3.metric("Sede dominante", top_sede)
+    total_bins = dfx["_Edad_Bin"].notna().sum()
+    k4.metric("Registros con edad", f"{total_bins:,}")
 
-        status.update(label="Datos listos ✅", state="complete")
+    # --- Heatmap (Edad bin vs Prestación) ---
+    st.subheader("Mapa de calor: grupos de edad vs prestación (Top N)")
+    pt = pd.pivot_table(
+        dfx, index="_Edad_Bin", columns=prest_col, values=prest_col,
+        aggfunc="count", fill_value=0
+    ).astype(int)
 
-    # --------- Secciones de análisis (siempre usando df completo) ---------
-    if section == "📊 Visión general":
-        st.subheader("Top prestaciones por volumen")
-        top_n = st.slider("Mostrar top N", min_value=5, max_value=20, value=10, step=1)
-        top_series = by_prest.head(top_n)
+    fig, ax = plt.subplots(figsize=(min(14, 2+0.6*len(pt.columns)), 6))
+    im = ax.imshow(pt.values, aspect="auto")
+    ax.set_yticks(range(len(pt.index))); ax.set_yticklabels(pt.index.astype(str))
+    ax.set_xticks(range(len(pt.columns))); ax.set_xticklabels(pt.columns, rotation=45, ha="right")
+    for i in range(pt.shape[0]):
+        for j in range(pt.shape[1]):
+            ax.text(j, i, f"{pt.values[i,j]:,}", ha="center", va="center", fontsize=8)
+    ax.set_xlabel("Prestación (Top N)"); ax.set_ylabel("Grupo de edad")
+    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02)
+    st.pyplot(fig, use_container_width=True)
 
-        if px:
-            fig = px.bar(
-                top_series.reset_index().rename(columns={prest_col: "Prestación", "conteo": "Casos"}),
-                x="Prestación", y="Casos", title="Volumen por Prestación (todos los registros)"
-            )
-            fig.update_layout(xaxis_title="", yaxis_title="")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.bar_chart(top_series)
+    # --- Barras: distribución por edad de la prestación top ---
+    st.subheader("Distribución por edad – prestación más frecuente")
+    if not dfx.empty:
+        prest_top = dfx[prest_col].mode(dropna=True).iloc[0]
+        df_top = dfx[dfx[prest_col] == prest_top]
+        dist = df_top["_Edad_Bin"].value_counts().sort_index()
+        fig2, ax2 = plt.subplots(figsize=(10, 4))
+        ax2.bar(dist.index.astype(str), dist.values)
+        ax2.set_xlabel("Grupo de edad"); ax2.set_ylabel("N° casos"); ax2.set_title(prest_top)
+        st.pyplot(fig2, use_container_width=True)
 
-        if by_value is not None:
-            st.subheader("Top prestaciones por valor")
-            topv = by_value.head(top_n)
-            if px:
-                figv = px.bar(
-                    topv.reset_index().rename(columns={prest_col: "Prestación", val_col: "Valor"}),
-                    x="Prestación", y="Valor", title="Valor agregado por Prestación (todos los registros)"
-                )
-                figv.update_layout(xaxis_title="", yaxis_title="")
-                st.plotly_chart(figv, use_container_width=True)
-            else:
-                st.bar_chart(topv)
+    # --- Conclusiones automáticas ---
+    st.subheader("🧠 Conclusiones automáticas")
+    bullets = []
 
-        # Conclusiones ejecutivas rápidas
-        st.markdown("### 📝 Conclusiones automáticas")
-        bullets = []
-        p1, v1 = (top_series.index[0], int(top_series.iloc[0])) if not top_series.empty else ("—", 0)
-        bullets.append(f"- **Líder en volumen:** {p1} con **{v1}** casos.")
-        if by_value is not None and not by_value.empty:
-            p2, v2 = by_value.index[0], float(by_value.iloc[0])
-            bullets.append(f"- **Líder en valor:** {p2} (≈ {v2:,.0f}).")
-        # Edad dominante por prestación líder
-        if not df[df[prest_col] == p1].empty:
-            major = (df[df[prest_col] == p1]
-                     .groupby("_age_bin").size().sort_values(ascending=False))
-            if not major.empty:
-                bullets.append(f"- En **{p1}** domina el rango de edad **{major.index[0]}**.")
+    # 1) grupo etario con más casos
+    grp_counts = dfx["_Edad_Bin"].value_counts()
+    if not grp_counts.empty:
+        bullets.append(f"- El grupo etario con mayor volumen es **{grp_counts.idxmax()}** ({int(grp_counts.max()):,} registros).")
+
+    # 2) prestación dominante por grupo etario
+    top_by_age = (
+        dfx.dropna(subset=["_Edad_Bin"])
+           .groupby(["_Edad_Bin", prest_col])[prest_col]
+           .count()
+           .rename("n").reset_index()
+           .sort_values(["_Edad_Bin", "n"], ascending=[True, False])
+           .groupby("_Edad_Bin").head(1)
+    )
+    for _, row in top_by_age.iterrows():
+        bullets.append(f"- En **{row['_Edad_Bin']}** predomina **{row[prest_col]}** (n={int(row['n']):,}).")
+
+    # 3) edad promedio por prestación top
+    mean_age = (
+        dfx.dropna(subset=["_Edad"])
+           .groupby(prest_col)["_Edad"]
+           .mean()
+           .sort_values(ascending=False)
+           .head(5)
+    )
+    if not mean_age.empty:
+        bullets.append("- **Prestaciones con mayor edad promedio**: " +
+                       ", ".join([f"{k} ({v:.1f})" for k, v in mean_age.items()]))
+
+    if bullets:
         st.markdown("\n".join(bullets))
-
-    elif section == "🧩 Patrones y relación":
-        st.subheader("Heatmap Edad × Prestación (conteos)")
-        # Heatmap corporativo
-        if px:
-            fig = px.imshow(
-                by_age_prest.values,
-                labels=dict(x="Prestación", y="Rango de edad", color="Casos"),
-                x=by_age_prest.columns, y=by_age_prest.index,
-                aspect="auto", title="Distribución de casos por edad y prestación (todos los registros)"
-            )
-            fig.update_layout(margin=dict(t=60, b=30, l=10, r=10))
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.dataframe(by_age_prest, use_container_width=True)
-
-        # Insight: para cada rango, la prestación dominante
-        st.markdown("### 🧠 Insight por rango de edad")
-        dom = by_age_prest.idxmax(axis=1).rename("Prestación dominante")
-        st.dataframe(dom.to_frame(), use_container_width=True, height=300)
-
-        # Conclusiones
-        st.markdown("### 📝 Conclusiones")
-        insights = []
-        for age_rng, prest_dom in dom.items():
-            if pd.isna(prest_dom): 
-                continue
-            value = int(by_age_prest.loc[age_rng, prest_dom])
-            insights.append(f"- En **{age_rng}** predomina **{prest_dom}** (≈ {value} casos).")
-        if insights:
-            st.markdown("\n".join(insights))
-        else:
-            st.info("No se hallaron patrones dominantes claros con los datos actuales.")
-
-    elif section == "🤖 Predicción (beta)":
-        st.caption("Entrena un modelo simple (opcional). No muestra registros; usa todo el dataset internamente.")
-        run = st.button("Entrenar modelo base (clasificar prestación por edad)")
-        if run:
-            try:
-                from sklearn.model_selection import train_test_split
-                from sklearn.preprocessing import LabelEncoder
-                from sklearn.metrics import accuracy_score
-                from sklearn.linear_model import LogisticRegression
-
-                y = df[prest_col].astype(str)
-                X = pd.DataFrame({"edad": df[age_col].astype("float").fillna(-1.0)})
-
-                # encoder de etiqueta
-                le = LabelEncoder()
-                y_enc = le.fit_transform(y)
-
-                X_train, X_test, y_train, y_test = train_test_split(X, y_enc, test_size=0.2, random_state=42, stratify=y_enc)
-                clf = LogisticRegression(max_iter=1000, n_jobs=None)
-                clf.fit(X_train, y_train)
-                pred = clf.predict(X_test)
-                acc = accuracy_score(y_test, pred)
-
-                st.success(f"Exactitud base: **{acc*100:.2f}%** (solo con edad).")
-                st.caption("⚠️ Es un baseline. Mejora al agregar variables: sucursal, valor, convenios, fechas, etc.")
-            except ModuleNotFoundError:
-                st.error("Falta `scikit-learn` en el entorno. Si deseas, lo agregamos a `requirements.txt` y volvemos a entrenar.")
-            except Exception as e:
-                st.error(f"Error durante el entrenamiento: {e}")
+    else:
+        st.info("No fue posible generar conclusiones con los datos disponibles.")
