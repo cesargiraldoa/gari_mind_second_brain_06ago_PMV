@@ -1,7 +1,7 @@
 import pymssql
 import pandas as pd
 
-# 🔒 Conexión centralizada (mismo host/credenciales de Abraham)
+# 🔌 Conexión estable de Abraham
 def get_conn():
     return pymssql.connect(
         server="147.182.194.168",
@@ -11,7 +11,7 @@ def get_conn():
         timeout=30, login_timeout=15
     )
 
-# ✅ ORIGINAL DE ABRAHAM (no lo toco)
+# ✅ Preview TOP 10 (lo que ya usas)
 def get_sales_data():
     try:
         conn = get_conn()
@@ -23,12 +23,7 @@ def get_sales_data():
         print("❌ Error al cargar datos de ventas:", e)
         return pd.DataFrame({'error': [str(e)]})
 
-# ▶️ Preview parametrizable (por si quieres otra tabla o TOP distinto)
-def get_preview(table_name: str = "Prestaciones_Temporal", top_n: int = 10) -> pd.DataFrame:
-    with get_conn() as conn:
-        return pd.read_sql(f"SELECT TOP {top_n} * FROM {table_name};", conn)
-
-# ▶️ Carga completa para análisis (con filtro opcional de fechas)
+# ▶️ NUEVO: Carga completa para análisis, con filtro opcional de fechas
 def get_all_sales_data(
     table_name: str = "Prestaciones_Temporal",
     date_col: str | None = None,
